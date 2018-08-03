@@ -1,0 +1,22 @@
+{
+  "name": "destiny-clan-activity",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nwingert/destiny-clan-activity.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nwingert/destiny-clan-activity/issues"
+  },
+  "homepage": "https://github.com/nwingert/destiny-clan-activity#readme",
+  "dependencies": {
+    "the-traveler": "^0.7.1"
+  }
+}
