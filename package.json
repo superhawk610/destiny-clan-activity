@@ -17,6 +17,7 @@
   },
   "homepage": "https://github.com/nwingert/destiny-clan-activity#readme",
   "dependencies": {
+    "node-fetch": "^2.2.0",
     "the-traveler": "^0.7.1"
   }
 }
