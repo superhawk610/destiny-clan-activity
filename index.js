@@ -45,12 +45,38 @@ async function getClanMemberIds() {
     return memberIds;
 }
 
+async function getCharacters(memberId) {
+    const response = await fetch('https://www.bungie.net/Platform/Destiny2/4/Profile/' + memberId + '/?components=100', { headers: fetchHeaders });
+    const json = await response.json()
+    const list = json.Response.profile.data.characterIds;
+    return list;
+}
+
+async function getActivities(memberId, characterId, count) {
+    if (!count) {count = 100};
+    const response = await fetch(`https://www.bungie.net/Platform/Destiny2/4/Account/${memberId}/Character/${characterId}/Stats/Activities/?count=${count}`, { headers: fetchHeaders });
+    const json = await response.json()
+    const list = json.Response.activities;
+    return list;
+}
+
 // dump clan list
 (async () => {
-    const clanInfo = await getClanMemberIds();
-    console.log(clanInfo);
+    const clanList = await getClanMemberIds();
 
-    // get group id for member id
+    for (let memberId of clanList) {
+        console.log(memberId);
+
+        // get chars
+        const charList = await getCharacters(memberId);
+        console.log(charList);
+
+        for (let characterId of charList) {
+            const activityList = await getActivities(memberId, characterId);
+            console.log(activityList)
+        }
+    }
+
     // get clan member list for group id
     // for each clan member in list
         // get character list for clan member
