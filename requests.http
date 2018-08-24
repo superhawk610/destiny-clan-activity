@@ -11,3 +11,19 @@ content-type: application/json
 X-API-Key: d78cb29fa3ab4ff8bacc5be25a96be9f
 
 ###
+
+GET https://www.bungie.net/Platform/Destiny2/4/Account/4611686018467232940/Character/2305843009302154352/Stats/Activities/?count=100&page=0
+content-type: application/json
+X-API-Key: d78cb29fa3ab4ff8bacc5be25a96be9f
+
+###
+
+GET https://www.bungie.net/Platform/Destiny2/4/Account/4611686018467397532/Character/2305843009301515545/Stats/Activities/?count=100
+content-type: application/json
+X-API-Key: d78cb29fa3ab4ff8bacc5be25a96be9f
+
+###
+
+GET https://www.bungie.net/Platform//Destiny2/Stats/PostGameCarnageReport/2065415329/
+content-type: application/json
+X-API-Key: d78cb29fa3ab4ff8bacc5be25a96be9f
