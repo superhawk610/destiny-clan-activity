@@ -17,6 +17,10 @@
   },
   "homepage": "https://github.com/nwingert/destiny-clan-activity#readme",
   "dependencies": {
+    "csv-writer": "^1.2.0",
+    "eslint": "^5.4.0",
+    "eslint-config-airbnb-base": "^13.1.0",
+    "eslint-plugin-import": "^2.14.0",
     "fetch-retry": "^2.0.0",
     "node-fetch": "^2.2.0"
   }
