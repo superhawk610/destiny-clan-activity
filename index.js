@@ -1,25 +1,21 @@
 /* eslint-disable no-await-in-loop,no-param-reassign,no-restricted-syntax */
 const fetch = require('fetch-retry');
 
-const apiKey = 'd78cb29fa3ab4ff8bacc5be25a96be9f';
-const groupId = '2475694'; // this could change, if so use 'getClanInfo' and dump the new id
-const fetchHeaders = { 'X-API-Key': 'd78cb29fa3ab4ff8bacc5be25a96be9f' };
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const apiKey = process.argv[2];
+const groupId = process.argv[3];
 
 let month = new Date().getMonth();
-if (process.argv.length > 2) {
+if (process.argv.length > 4) {
   month = Number(process.argv[2]);
 }
 
 let csvPath = './activity_scores.csv';
-if (process.argv.length > 3) {
+if (process.argv.length > 5) {
   csvPath = process.argv[3];
 }
 
-
-const clanMemberIds = [];
-const activityScores = [];
-
+const fetchHeaders = { 'X-API-Key': apiKey };
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const csvWriter = createCsvWriter({
   path: csvPath,
   header: [
@@ -28,6 +24,9 @@ const csvWriter = createCsvWriter({
     { id: 'clanMemberList', title: 'CLAN_MEMBERS' },
   ],
 });
+
+const clanMemberIds = [];
+const activityScores = [];
 
 function chunkArray(myArray, chunkSize) {
   const results = [];
