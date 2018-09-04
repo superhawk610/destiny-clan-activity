@@ -17,11 +17,16 @@
   },
   "homepage": "https://github.com/nwingert/destiny-clan-activity#readme",
   "dependencies": {
+    "bottleneck": "^2.8.0",
     "csv-writer": "^1.2.0",
     "eslint": "^5.4.0",
     "eslint-config-airbnb-base": "^13.1.0",
     "eslint-plugin-import": "^2.14.0",
     "fetch-retry": "^2.0.0",
-    "node-fetch": "^2.2.0"
+    "json-fetch": "^7.5.1",
+    "mysql": "^2.16.0",
+    "node-fetch-json": "^0.1.7",
+    "promise-retry": "^1.1.1",
+    "puppeteer": "^1.7.0"
   }
 }

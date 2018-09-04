@@ -1,8 +1,13 @@
 /* eslint-disable no-await-in-loop,no-param-reassign,no-restricted-syntax */
-const fetch = require('fetch-retry');
+const fetchJson = require('node-fetch-json');
+const promiseRetry = require('promise-retry');
+const Bottleneck = require('bottleneck');
+const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 
 const apiKey = process.argv[2];
 const groupId = process.argv[3];
+const limiter = new Bottleneck({ minTime: 30, trackDoneStatus: true });
+const fetchJsonWrapped = limiter.wrap(fetchJsonRetry);
 
 let month = new Date().getMonth();
 if (process.argv.length > 4) {
@@ -16,25 +21,24 @@ if (process.argv.length > 5) {
 
 const fetchHeaders = { 'X-API-Key': apiKey };
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+let membersSlice;
+if (process.argv.length > 4) {
+  membersSlice = process.argv[4];
+}
+
+const clanMemberIds = [];
+const activityScores = [];
+const activityCache = new Map();
+
 const csvWriter = createCsvWriter({
   path: csvPath,
   header: [
     { id: 'name', title: 'NAME' },
     { id: 'totalClanGames', title: 'CLAN_GAMES' },
+    { id: 'gameModes', title: 'GAME_MODES' },
     { id: 'clanMemberList', title: 'CLAN_MEMBERS' },
   ],
 });
-
-const clanMemberIds = [];
-const activityScores = [];
-
-function chunkArray(myArray, chunkSize) {
-  const results = [];
-  while (myArray.length) {
-    results.push(myArray.splice(0, chunkSize));
-  }
-  return results;
-}
 
 async function getClanInfo() {
   const response = await fetch('https://www.bungie.net/Platform/GroupV2/Name/Charlie Company 337/1', { headers: fetchHeaders });
@@ -44,8 +48,7 @@ async function getClanInfo() {
 
 // returns an array of { displayName, membershipId } for all clan members
 async function getClanMembers() {
-  const response = await fetch(`https://www.bungie.net/Platform/GroupV2/${groupId}/Members/`, { headers: fetchHeaders });
-  const json = await response.json();
+  const json = await fetchJsonWrapped(`https://www.bungie.net/Platform/GroupV2/${groupId}/Members/`, { headers: fetchHeaders });
   const list = json.Response.results;
   const members = [];
   list.forEach((member) => {
@@ -59,8 +62,7 @@ async function getClanMembers() {
 
 // returns array of characterId for account of memberId
 async function getCharacters(memberId) {
-  const response = await fetch(`https://www.bungie.net/Platform/Destiny2/4/Profile/${memberId}/?components=100`, { headers: fetchHeaders });
-  const json = await response.json();
+  const json = await fetchJsonWrapped(`https://www.bungie.net/Platform/Destiny2/4/Profile/${memberId}/?components=100`, { headers: fetchHeaders });
   const list = json.Response.profile.data.characterIds;
   return list;
 }
@@ -79,43 +81,35 @@ async function getActivities(memberId, characterId, startDate, endDate) {
   const activities = [];
   let page = 0;
   const fetchCount = 100;
-  let returnCount = fetchCount;
 
   let keepGoing = true;
   while (keepGoing) {
     // console.log(activityDate);
     // console.log(startDate);
 
-    let gotActivityJson;
-    let activityList;
-    while (!gotActivityJson) {
-      const gameResponse = await fetch(`https://www.bungie.net/Platform/Destiny2/4/Account/${memberId}/Character/${characterId}/Stats/Activities/?count=100&page=${page}&modes='5,7'`, { headers: fetchHeaders });
-      const contentType = gameResponse.headers.get('content-type');
-      if (contentType && contentType.indexOf('application/json') !== -1) {
-        const json = await gameResponse.json();
-        activityList = json.Response.activities;
-        gotActivityJson = true;
-      } else {
-        console.log('thanks alot bungo');
-      }
-    }
-    
+    const activityJson = await fetchJsonWrapped(`https://www.bungie.net/Platform/Destiny2/4/Account/${memberId}/Character/${characterId}/Stats/Activities/?count=100&page=${page}&modes='5,7'`, { headers: fetchHeaders });
+    const activityList = activityJson.Response.activities;
+
     for (const activity of activityList) {
       const activityDate = new Date(activity.period);
       if (activityDate >= startDate && activityDate <= endDate) {
         const activityId = activity.activityDetails.instanceId;
-        let gotJson;
-        while (!gotJson) {
-          const gameResponse = await fetch(`https://www.bungie.net/Platform//Destiny2/Stats/PostGameCarnageReport/${activityId}/`, { headers: fetchHeaders });
-          const contentType = gameResponse.headers.get('content-type');
-          if (contentType && contentType.indexOf('application/json') !== -1) {
-            const gameJson = await gameResponse.json();
-            activities.push(gameJson.Response);
-            gotJson = true;
-          } else {
-            console.log('thanks alot bungo');
+        const activityMode = activity.activityDetails.mode;
+        let activityDetails;
+        if (activityCache.has(activityId)) {
+          activityDetails = activityCache.get(activityId);
+        } else {
+          const json = await fetchJsonWrapped(`https://www.bungie.net/Platform//Destiny2/Stats/PostGameCarnageReport/${activityId}/`, { headers: fetchHeaders });
+          if (json.Response === undefined) {
+            console.log('also wtf');
           }
+          const activityPlayers = [];
+          json.Response.entries.map(entry => activityPlayers.push({ membershipId: entry.player.destinyUserInfo.membershipId, displayName: entry.player.destinyUserInfo.displayName }));
+          activityDetails = { players: activityPlayers, mode: activityMode };
+          activityCache.set(activityId, activityDetails);
         }
+
+        if (activityDetails.players.length > 1) { activities.push(activityDetails); }
       } else if (activityDate < startDate) {
         keepGoing = false;
       }
@@ -134,6 +128,7 @@ async function calculateActivityScore(member) {
   const activityScore = {
     totalClanGames: 0,
     clanMembers: new Set(),
+    modes: new Map(),
   };
 
   try {
@@ -142,11 +137,20 @@ async function calculateActivityScore(member) {
       // console.log(characterId);
       const activities = await getActivities(member.id, characterId, startDate, endDate);
       for (const activity of activities) {
-        for (const entry of activity.entries) {
-          const entryMemberId = entry.player.destinyUserInfo.membershipId;
+        // console.log(activity.activityDetails.instanceId);
+        if (activity === undefined) {
+          console.log('wtf');
+        }
+        for (const player of activity.players) {
+          const entryMemberId = player.membershipId;
           if (entryMemberId !== member.id && clanMemberIds.includes(entryMemberId)) {
             activityScore.totalClanGames += 1;
-            activityScore.clanMembers.add(entry.player.destinyUserInfo.displayName);
+            activityScore.clanMembers.add(player.displayName);
+            if (activityScore.modes.has(activity.mode)) {
+              activityScore.modes.set(activity.mode, activityScore.modes.get(activity.mode) + 1);
+            } else {
+              activityScore.modes.set(activity.mode, 1);
+            }
           }
         }
       }
@@ -159,6 +163,7 @@ async function calculateActivityScore(member) {
   activityScores.push({
     name: member.name,
     totalClanGames: activityScore.totalClanGames,
+    gameModes: JSON.stringify([...activityScore.modes]),
     clanMemberList: [...activityScore.clanMembers],
   });
 }
@@ -166,23 +171,36 @@ async function calculateActivityScore(member) {
 (async () => {
   console.log('generating clan activity report - this will take awhile :)');
   console.time('activity report');
-  const clanMembers = await getClanMembers();
+  let clanMembers = await getClanMembers();
 
   // generate an array of ids for faster lookup later
   clanMembers.forEach((member) => {
     clanMemberIds.push(member.id);
   });
 
-  //const subArray = clanMembers.slice(1, 10);
-  const splitArray = chunkArray(clanMembers, 20);
-  for (let subArray of splitArray) {
-    const promises = subArray.map(calculateActivityScore);
-    await Promise.all(promises);
+  if (membersSlice) {
+    clanMembers = clanMembers.slice(0, membersSlice);
   }
+
+  const promises = clanMembers.map(calculateActivityScore);
+  await Promise.all(promises);
 
   console.log(`report generation complete - writing csv to ${csvPath}`);
   activityScores.sort((a, b) => b.totalClanGames - a.totalClanGames);
   await csvWriter.writeRecords(activityScores);
   console.log('report successfully written to file');
+  console.log(limiter.counts());
   console.timeEnd('activity report');
 })();
+
+async function fetchJsonRetry(url, options) {
+  return promiseRetry(async (retry, number) => {
+    try {
+      const json = await fetchJson.get(url, {}, options);
+      return json;
+    } catch (error) {
+      console.log(`retry # ${number} - ${error}`);
+      retry(error);
+    }
+  });
+}
