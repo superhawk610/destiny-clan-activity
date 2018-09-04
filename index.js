@@ -3,42 +3,64 @@ const fetchJson = require('node-fetch-json');
 const promiseRetry = require('promise-retry');
 const Bottleneck = require('bottleneck');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+const program = require('commander');
 
-const apiKey = process.argv[2];
-const groupId = process.argv[3];
-const limiter = new Bottleneck({ minTime: 30, trackDoneStatus: true });
+program
+  .option('-k, --api-key [apiKey]', 'X-API-Key')
+  .option('-g, --group-id [groupId]', 'Group ID')
+  .option('-o, --output [output]', 'Output CSV path', './activity-scores.csv')
+  .option('-m, --month [month]', 'Activity month (0-11)', new Date().getMonth())
+  .option('-s, --slice [slice]', 'Members slice (testing)')
+  .option('-r, --rate [rate]', 'Request rate limit(ms)', 40)
+  .parse(process.argv);
+
+const { apiKey, groupId, output } = program;
+const month = Number(program.month);
+const slice = Number(program.slice);
+const rate = Number(program.rate);
+const limiter = new Bottleneck({ minTime: rate, trackDoneStatus: true });
 const fetchJsonWrapped = limiter.wrap(fetchJsonRetry);
-
-let month = new Date().getMonth();
-if (process.argv.length > 4) {
-  month = Number(process.argv[2]);
-}
-
-let csvPath = './activity_scores.csv';
-if (process.argv.length > 5) {
-  csvPath = process.argv[3];
-}
-
 const fetchHeaders = { 'X-API-Key': apiKey };
-const createCsvWriter = require('csv-writer').createObjectCsvWriter;
-let membersSlice;
-if (process.argv.length > 4) {
-  membersSlice = process.argv[4];
-}
-
-const clanMemberIds = [];
 const activityScores = [];
 const activityCache = new Map();
+const clanMemberIds = [];
 
-const csvWriter = createCsvWriter({
-  path: csvPath,
-  header: [
-    { id: 'name', title: 'NAME' },
-    { id: 'totalClanGames', title: 'CLAN_GAMES' },
-    { id: 'gameModes', title: 'GAME_MODES' },
-    { id: 'clanMemberList', title: 'CLAN_MEMBERS' },
-  ],
-});
+(async () => {
+  console.log('generating clan activity report - this will take awhile :)');
+  console.time('activity report');
+  let clanMembers = await getClanMembers();
+
+  // generate an array of ids for faster lookup later
+
+  clanMembers.forEach((member) => {
+    clanMemberIds.push(member.id);
+  });
+
+  if (slice) {
+    clanMembers = clanMembers.slice(0, slice);
+  }
+
+  const promises = clanMembers.map(calculateActivityScore);
+  await Promise.all(promises);
+
+  console.log(`report generation complete - writing csv to ${output}`);
+  activityScores.sort((a, b) => b.totalClanGames - a.totalClanGames);
+
+  const csvWriter = createCsvWriter({
+    path: output,
+    header: [
+      { id: 'name', title: 'NAME' },
+      { id: 'totalClanGames', title: 'CLAN_GAMES' },
+      { id: 'gameModes', title: 'GAME_MODES' },
+      { id: 'clanMemberList', title: 'CLAN_MEMBERS' },
+    ],
+  });
+  await csvWriter.writeRecords(activityScores);
+
+  console.log('report successfully written to file');
+  console.log(limiter.counts());
+  console.timeEnd('activity report');
+})();
 
 async function getClanInfo() {
   const response = await fetch('https://www.bungie.net/Platform/GroupV2/Name/Charlie Company 337/1', { headers: fetchHeaders });
@@ -167,31 +189,6 @@ async function calculateActivityScore(member) {
     clanMemberList: [...activityScore.clanMembers],
   });
 }
-
-(async () => {
-  console.log('generating clan activity report - this will take awhile :)');
-  console.time('activity report');
-  let clanMembers = await getClanMembers();
-
-  // generate an array of ids for faster lookup later
-  clanMembers.forEach((member) => {
-    clanMemberIds.push(member.id);
-  });
-
-  if (membersSlice) {
-    clanMembers = clanMembers.slice(0, membersSlice);
-  }
-
-  const promises = clanMembers.map(calculateActivityScore);
-  await Promise.all(promises);
-
-  console.log(`report generation complete - writing csv to ${csvPath}`);
-  activityScores.sort((a, b) => b.totalClanGames - a.totalClanGames);
-  await csvWriter.writeRecords(activityScores);
-  console.log('report successfully written to file');
-  console.log(limiter.counts());
-  console.timeEnd('activity report');
-})();
 
 async function fetchJsonRetry(url, options) {
   return promiseRetry(async (retry, number) => {
