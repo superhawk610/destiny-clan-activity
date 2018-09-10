@@ -28,6 +28,7 @@
     "mysql": "^2.16.0",
     "node-fetch-json": "^0.1.7",
     "promise-retry": "^1.1.1",
-    "puppeteer": "^1.7.0"
+    "puppeteer": "^1.7.0",
+    "the-traveler": "^0.7.2"
   }
 }

@@ -4,20 +4,36 @@ const promiseRetry = require('promise-retry');
 const Bottleneck = require('bottleneck');
 const createCsvWriter = require('csv-writer').createObjectCsvWriter;
 const program = require('commander');
+const traveler = require('the-traveler');
+const manifest = require('the-traveler/build/Manifest'); 
+
 
 program
   .option('-k, --api-key [apiKey]', 'X-API-Key')
   .option('-g, --group-id [groupId]', 'Group ID')
   .option('-o, --output [output]', 'Output CSV path', './activity-scores.csv')
+  .option('-s, --start [start]', 'Start date - form of \'2018-9-4\'')
+  .option('-e, --end [end]', 'End date - form of \'2018-9-6\'')
   .option('-m, --month [month]', 'Activity month (0-11)', new Date().getMonth())
+  .option('-d, --displayName [displayName]', 'Member display name - ex \'ferenz#11349\'')
   .option('-s, --slice [slice]', 'Members slice (testing)')
   .option('-r, --rate [rate]', 'Request rate limit(ms)', 40)
   .parse(process.argv);
 
 const { apiKey, groupId, output } = program;
+const name = program.displayName;
 const month = Number(program.month);
 const slice = Number(program.slice);
 const rate = Number(program.rate);
+let startDate;
+let endDate;
+if (program.start && program.end) {
+  startDate = new Date(program.start);
+  endDate = new Date(program.end);
+} else {
+  startDate = new Date(2018, month, 1);
+  endDate = new Date(2018, month + 1, 0);
+}
 const limiter = new Bottleneck({ minTime: rate, trackDoneStatus: true });
 const fetchJsonWrapped = limiter.wrap(fetchJsonRetry);
 const fetchHeaders = { 'X-API-Key': apiKey };
@@ -28,15 +44,18 @@ const clanMemberIds = [];
 (async () => {
   console.log('generating clan activity report - this will take awhile :)');
   console.time('activity report');
+
   let clanMembers = await getClanMembers();
-
   // generate an array of ids for faster lookup later
-
   clanMembers.forEach((member) => {
     clanMemberIds.push(member.id);
   });
 
-  if (slice) {
+  if (name) {
+    const id = await getMembershipId(name);
+    clanMembers = [];
+    clanMembers.push({ name, membershipId: id });
+  } else if (slice) {
     clanMembers = clanMembers.slice(0, slice);
   }
 
@@ -50,6 +69,7 @@ const clanMemberIds = [];
     path: output,
     header: [
       { id: 'name', title: 'NAME' },
+      { id: 'activityScore', title: 'ACTIVITY_SCORE'},
       { id: 'totalClanGames', title: 'CLAN_GAMES' },
       { id: 'gameModes', title: 'GAME_MODES' },
       { id: 'clanMemberList', title: 'CLAN_MEMBERS' },
@@ -61,6 +81,17 @@ const clanMemberIds = [];
   console.log(limiter.counts());
   console.timeEnd('activity report');
 })();
+
+async function getMembershipId(displayName) {
+  if (!displayName.includes('#') && !displayName.includes('%23')) {
+    throw new Error('getMembershipId: displayName must contain \'#\' or \'%23\' eg \'ferenz#11349\'');
+  }
+  displayName = displayName.replace('#', '%23');
+  // console.log(displayName);
+  const json = await fetch(`https://www.bungie.net/Platform/Destiny2/SearchDestinyPlayer/4/${displayName}/`, { headers: fetchHeaders });
+  const id = json.Response[0].membershipId;
+  return id;
+}
 
 async function getClanInfo() {
   const response = await fetch('https://www.bungie.net/Platform/GroupV2/Name/Charlie Company 337/1', { headers: fetchHeaders });
@@ -91,15 +122,8 @@ async function getCharacters(memberId) {
 
 // returns array of Destiny.HistoricalStats.DestinyActivityHistoryResults
 // for memberId/CharacterId between startDate and endDate
-async function getActivities(memberId, characterId, startDate, endDate) {
+async function getActivities(memberId, characterId) {
   // console.log(memberId);
-  if (!startDate || !endDate) {
-    // if no start or end date is provided then use current month to date
-    endDate = new Date();
-    startDate = new Date();
-    startDate.setDate(1);
-  }
-
   const activities = [];
   let page = 0;
   const fetchCount = 100;
@@ -111,6 +135,9 @@ async function getActivities(memberId, characterId, startDate, endDate) {
 
     const activityJson = await fetchJsonWrapped(`https://www.bungie.net/Platform/Destiny2/4/Account/${memberId}/Character/${characterId}/Stats/Activities/?count=100&page=${page}&modes='5,7'`, { headers: fetchHeaders });
     const activityList = activityJson.Response.activities;
+    if (activityList === undefined) {
+      console.log(`activity list broke for member ${memberId}`);
+    }
 
     for (const activity of activityList) {
       const activityDate = new Date(activity.period);
@@ -143,11 +170,10 @@ async function getActivities(memberId, characterId, startDate, endDate) {
 }
 
 async function calculateActivityScore(member) {
-  const startDate = new Date(2018, month, 1);
-  const endDate = new Date(2018, month + 1, 0);
   console.log(`calculating activity score for clan member ${member.name} for ${startDate} - ${endDate}`);
 
-  const activityScore = {
+  const activityEntry = {
+    activityScore: 0,
     totalClanGames: 0,
     clanMembers: new Set(),
     modes: new Map(),
@@ -163,15 +189,20 @@ async function calculateActivityScore(member) {
         if (activity === undefined) {
           console.log('wtf');
         }
+        let clanGame = false;
         for (const player of activity.players) {
           const entryMemberId = player.membershipId;
           if (entryMemberId !== member.id && clanMemberIds.includes(entryMemberId)) {
-            activityScore.totalClanGames += 1;
-            activityScore.clanMembers.add(player.displayName);
-            if (activityScore.modes.has(activity.mode)) {
-              activityScore.modes.set(activity.mode, activityScore.modes.get(activity.mode) + 1);
+            activityEntry.activityScore += 1;
+            if (!clanGame) {
+              activityEntry.totalClanGames += 1;
+              clanGame = true;
+            }
+            activityEntry.clanMembers.add(player.displayName);
+            if (activityEntry.modes.has(activity.mode)) {
+              activityEntry.modes.set(activity.mode, activityEntry.modes.get(activity.mode) + 1);
             } else {
-              activityScore.modes.set(activity.mode, 1);
+              activityEntry.modes.set(activity.mode, 1);
             }
           }
         }
@@ -184,9 +215,9 @@ async function calculateActivityScore(member) {
 
   activityScores.push({
     name: member.name,
-    totalClanGames: activityScore.totalClanGames,
-    gameModes: JSON.stringify([...activityScore.modes]),
-    clanMemberList: [...activityScore.clanMembers],
+    totalClanGames: activityEntry.totalClanGames,
+    gameModes: JSON.stringify([...activityEntry.modes]),
+    clanMemberList: [...activityEntry.clanMembers],
   });
 }
 
@@ -201,3 +232,10 @@ async function fetchJsonRetry(url, options) {
     }
   });
 }
+
+const gameModes = new Map();
+gameModes.set(2, 'story');
+gameModes.set(3, 'strike');
+gameModes.set(4, 'raid');
+gameModes.set(5, 'pvp');
+gameModes.set(6, 'patrol');
