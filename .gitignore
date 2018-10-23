@@ -5,11 +5,9 @@
 # Node stuff
 node_modules
 
-# generated reports
+# generated reports / cache
+*.json
 *.csv
-
-# cached activites
-lib/cache/*.json
 
 # environment variables
 .env
