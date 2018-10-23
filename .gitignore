@@ -1,4 +1,15 @@
-node_modules/*
-.idea/
-*.csv
+# editor config
+.idea
 .vscode
+
+# Node stuff
+node_modules
+
+# generated reports
+*.csv
+
+# cached activites
+lib/cache/*.json
+
+# environment variables
+.env
