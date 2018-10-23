@@ -1,0 +1,25 @@
+doctype html
+html
+  head
+    title Clan Stats
+    link(rel='stylesheet', href='app.css')
+
+  body
+    #page-wrapper
+      h1 Clan Statistics
+      h2 Charlie Company 337
+
+      .table-wrapper
+        table
+          thead
+            tr
+              th User
+              th Activity Score
+              th Clan Games
+          tbody
+            each user in roster
+              tr
+                td
+                  a(href=user.name)= user.name
+                td= user.activityScore
+                td= user.totalClanGames

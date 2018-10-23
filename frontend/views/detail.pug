@@ -1,0 +1,31 @@
+doctype html
+html
+  head
+    title= `User Stats | ${user.name}`
+    link(rel='stylesheet', href='app.css')
+
+  body
+    #page-wrapper
+      a(href='/') &lsaquo; Back
+      h1 User Statistics
+      h2= user.name
+
+      h3 Game Modes
+      .table-wrapper
+        table
+          thead
+            tr
+              th Game Type
+              th Activity Score
+          tbody
+            each game in Object.entries(user.gameModes)
+              tr
+                td= _.startCase(game[0])
+                td= game[1]
+
+      h3 Clan Teammates
+      table
+        tbody
+          each member in user.clanMemberList
+            tr
+              td= member

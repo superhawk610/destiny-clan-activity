@@ -1,0 +1,89 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: BlinkMacSystemFont, -apple-system, 'Segoe UI', Roboto, Oxygen,
+    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', Helvetica,
+    Arial, sans-serif;
+}
+
+#page-wrapper {
+  max-width: 1000px;
+  margin: 25px auto;
+  padding: 25px;
+}
+
+.red {
+  color: hsl(348, 100%, 61%);
+}
+
+.blue {
+  color: hsl(204, 86%, 53%);
+}
+
+.green {
+  color: hsl(171, 100%, 41%);
+}
+
+a {
+  color: hsl(204, 86%, 53%);
+  text-decoration: none;
+  padding-bottom: 2px;
+}
+
+h1 {
+  margin-bottom: 0;
+}
+
+h2 {
+  margin-top: 0;
+  font-size: 18px;
+  color: #dbdbdb;
+}
+
+h3 {
+  font-size: 22px;
+  padding-bottom: 2px;
+  margin: 40px 0 10px;
+}
+
+.table-wrapper {
+  position: relative;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+table {
+  background: #fff;
+  color: #363636;
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+  margin: 10px 0 40px;
+}
+
+table tr:nth-child(even) {
+  background: #fafafa;
+}
+
+table tr > th,
+table tr > td {
+  border: 1px solid #dbdbdb;
+  color: #363636;
+  padding: 0.5em 0.75em;
+  text-align: center;
+  vertical-align: top;
+}
+
+table tr > th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fff;
+  border-width: 0 0 2px;
+}
+
+table tr > td {
+  border-width: 0 0 1px;
+}
