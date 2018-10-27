@@ -12,7 +12,7 @@ async function getActivityReport() {
 
   let clanMembers;
   if (displayName) {
-    const id = api.getMembershipId(displayName);
+    const id = await api.getMembershipId(displayName);
     clanMembers = [
       {
         id,
